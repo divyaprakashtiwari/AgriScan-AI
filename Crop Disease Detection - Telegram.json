@@ -1,0 +1,370 @@
+{
+  "name": "Crop Disease Detection - Telegram",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1,
+      "position": [
+        -880,
+        416
+      ],
+      "id": "db798bfb-e78f-4fe4-a765-82c2a318a7ea",
+      "webhookId": "eeae3c0c-d78a-43e3-af0b-1ab08ba83ae8",
+      "credentials": {
+        "telegramApi": {
+          "id": "TCsEkzd0UD20iitv",
+          "name": "AgriScanProjectBot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.message.photo }}",
+              "rightValue": "",
+              "operator": {
+                "type": "array",
+                "operation": "exists",
+                "singleValue": true
+              },
+              "id": "f6aaebca-9b03-4a57-a9a5-f51c7c469e3f"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "IF Photo Exists",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -656,
+        416
+      ],
+      "id": "e18b5d23-7d02-4b17-b00a-53eeace69ecb",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "fileId": "={{ $json.message.photo[$json.message.photo.length - 1].file_id }}",
+        "additionalFields": {}
+      },
+      "name": "Get File",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        -448,
+        304
+      ],
+      "id": "f58e0b78-b0bf-4a47-abe2-35bdc8ab3698",
+      "webhookId": "ea43ffb7-d6a9-4708-9c95-564b00ab215d",
+      "credentials": {
+        "telegramApi": {
+          "id": "TCsEkzd0UD20iitv",
+          "name": "AgriScanProjectBot"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://fastapi:8000/predict",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "data"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "name": "Predict Disease",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        -240,
+        176
+      ],
+      "id": "7824c7ce-431e-488e-800a-38391e5526b4",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.confidence }}",
+              "rightValue": 0.6,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              },
+              "id": "e42a67c8-6162-4b23-a6ff-5373a4712805"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {
+          "looseTypeValidation": true
+        }
+      },
+      "name": "IF Confidence OK",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        16,
+        224
+      ],
+      "id": "c06e3c11-eb8b-4aa2-8ba4-787ba5077cb1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const rawDisease = $json.disease;\nconst diseaseHindi = $json.disease_hindi;\nconst confidence = ($json.confidence * 100).toFixed(1);\n\n// Clean up disease name: remove underscores, extra spaces\nconst cleanDisease = rawDisease\n  .replace(/_+/g, ' ')\n  .replace(/\\s+/g, ' ')\n  .trim();\n\nconst replyText =\n`🌱 *Crop Disease Diagnosis*\n\n🔍 Disease: ${cleanDisease}\n🌿 रोग: ${diseaseHindi}\n📊 Confidence: ${confidence}%\n\n💊 Please check the treatment guide for this condition.`;\n\nreturn [{ json: { reply_text: replyText } }];"
+      },
+      "name": "Format Success Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        240,
+        128
+      ],
+      "id": "23944683-ed89-42ba-b682-1f93a833c89c"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { reply_text: `⚠️ I'm not confident about this diagnosis. Please retake the photo with better lighting, closer to the leaf, and try again.` } }];"
+      },
+      "name": "Format Low Confidence Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        240,
+        320
+      ],
+      "id": "83cf88d0-d1df-4eb3-a5f1-9906ce68c97f"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { reply_text: `❌ Sorry, something went wrong while analyzing your photo. Please try again in a moment.` } }];"
+      },
+      "name": "Format Error Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        16,
+        512
+      ],
+      "id": "b9b94714-d9ac-4d79-a4bf-fc5ef23e6061"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { reply_text: `👋 Please send a clear photo of the affected leaf so I can diagnose it.` } }];"
+      },
+      "name": "Format No Photo Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        240,
+        688
+      ],
+      "id": "079282da-95ca-4f37-9ee9-0121b0914c74"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "text": "={{ $json.reply_text }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "name": "Send Reply",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        464,
+        448
+      ],
+      "id": "28d9b674-f404-4fa1-b597-fb457e741dee",
+      "webhookId": "23430760-36ae-4d70-bdbd-ae4a0a3e3010",
+      "credentials": {
+        "telegramApi": {
+          "id": "TCsEkzd0UD20iitv",
+          "name": "AgriScanProjectBot"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "IF Photo Exists",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Photo Exists": {
+      "main": [
+        [
+          {
+            "node": "Get File",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format No Photo Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get File": {
+      "main": [
+        [
+          {
+            "node": "Predict Disease",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Error Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Predict Disease": {
+      "main": [
+        [
+          {
+            "node": "IF Confidence OK",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Error Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Confidence OK": {
+      "main": [
+        [
+          {
+            "node": "Format Success Reply",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Low Confidence Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Success Reply": {
+      "main": [
+        [
+          {
+            "node": "Send Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Low Confidence Reply": {
+      "main": [
+        [
+          {
+            "node": "Send Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Error Reply": {
+      "main": [
+        [
+          {
+            "node": "Send Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format No Photo Reply": {
+      "main": [
+        [
+          {
+            "node": "Send Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "b6acf8a7-18fb-49e6-8bdb-9c6a6c805fbc",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "87cb0386c87e11ee30bfe6c3d911d2600a599f88b1ef515ed9a5c60d6e0bb3e3"
+  },
+  "nodeGroups": [],
+  "id": "mOwXJicsKZvNkboT",
+  "tags": []
+}
